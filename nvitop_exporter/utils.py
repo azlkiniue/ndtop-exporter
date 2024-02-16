@@ -17,9 +17,10 @@
 """Utility functions for ``nvitop-exporter``."""
 
 import socket
+import docker
 
 
-__all__ = ['get_ip_address']
+__all__ = ['get_ip_address', 'get_container_id', 'get_container_info']
 
 
 # Reference: https://stackoverflow.com/a/28950776
@@ -36,3 +37,24 @@ def get_ip_address() -> str:
     finally:
         s.close()
     return ip_address
+
+def get_container_id(searched_pid: str) -> str:
+    docker_client = docker.from_env()
+    """Get list of all containers"""
+    containers = docker_client.containers.list()
+    # iterate trough the list of containers
+    for container in containers:
+        # get the list of processes running inside the container
+        processes = docker_client.api.top(container.id)
+        list_of_processes = processes["Processes"]
+        # iterate through the list of processes
+        for process in list_of_processes:
+            pid = process[1]
+            # check if the pid is the searched_pid
+            if pid == searched_pid:
+                return container.id
+            
+def get_container_info(container_id: str) -> tuple:
+    docker_client = docker.from_env()
+    container = docker_client.containers.get(container_id)
+    return container.attrs["Name"].lstrip("/"), container.attrs["Config"]["Image"]

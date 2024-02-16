@@ -24,9 +24,9 @@ from typing import Sequence
 
 from prometheus_client import REGISTRY, CollectorRegistry, Gauge, Info
 
-from nvitop import Device, MiB, MigDevice, PhysicalDevice, host
+from nvitop import Device, MiB, MigDevice, PhysicalDevice, host, NA
 from nvitop.api.process import GpuProcess
-from nvitop_exporter.utils import get_ip_address
+from nvitop_exporter.utils import get_ip_address, get_container_id, get_container_info
 
 
 class PrometheusExporter:  # pylint: disable=too-many-instance-attributes
@@ -53,7 +53,7 @@ class PrometheusExporter:  # pylint: disable=too-many-instance-attributes
         self.hostname = hostname or get_ip_address()
         self.registry = registry
         self.interval = interval
-        self.alive_pids: dict[Device, set[tuple[int, str]]] = {
+        self.alive_pids: dict[Device, set[tuple[int, str, str, str]]] = {
             device: set() for device in self.devices
         }
 
@@ -395,63 +395,63 @@ class PrometheusExporter:  # pylint: disable=too-many-instance-attributes
             name='process_running_time',
             documentation='Process running time (s).',
             unit='Second',
-            labelnames=['hostname', 'index', 'devicename', 'uuid', 'pid', 'username'],
+            labelnames=['hostname', 'index', 'devicename', 'uuid', 'pid', 'username', 'container_name', 'container_image'],
             registry=self.registry,
         )
         self.process_cpu_percent = Gauge(
             name='process_cpu_percent',
             documentation='Process CPU percent (%).',
             unit='Percentage',
-            labelnames=['hostname', 'index', 'devicename', 'uuid', 'pid', 'username'],
+            labelnames=['hostname', 'index', 'devicename', 'uuid', 'pid', 'username', 'container_name', 'container_image'],
             registry=self.registry,
         )
         self.process_rss_memory = Gauge(
             name='process_rss_memory',
             documentation='Process memory resident set size (MiB).',
             unit='MiB',
-            labelnames=['hostname', 'index', 'devicename', 'uuid', 'pid', 'username'],
+            labelnames=['hostname', 'index', 'devicename', 'uuid', 'pid', 'username', 'container_name', 'container_image'],
             registry=self.registry,
         )
         self.process_memory_percent = Gauge(
             name='process_memory_percent',
             documentation='Process memory percent (%).',
             unit='Percentage',
-            labelnames=['hostname', 'index', 'devicename', 'uuid', 'pid', 'username'],
+            labelnames=['hostname', 'index', 'devicename', 'uuid', 'pid', 'username', 'container_name', 'container_image'],
             registry=self.registry,
         )
         self.process_gpu_memory = Gauge(
             name='process_gpu_memory',
             documentation='Process GPU memory (MiB).',
             unit='MiB',
-            labelnames=['hostname', 'index', 'devicename', 'uuid', 'pid', 'username'],
+            labelnames=['hostname', 'index', 'devicename', 'uuid', 'pid', 'username', 'container_name', 'container_image'],
             registry=self.registry,
         )
         self.process_gpu_sm_utilization = Gauge(
             name='process_gpu_sm_utilization',
             documentation='Process GPU SM utilization (%).',
             unit='Percentage',
-            labelnames=['hostname', 'index', 'devicename', 'uuid', 'pid', 'username'],
+            labelnames=['hostname', 'index', 'devicename', 'uuid', 'pid', 'username', 'container_name', 'container_image'],
             registry=self.registry,
         )
         self.process_gpu_memory_utilization = Gauge(
             name='process_gpu_memory_utilization',
             documentation='Process GPU memory utilization (%).',
             unit='Percentage',
-            labelnames=['hostname', 'index', 'devicename', 'uuid', 'pid', 'username'],
+            labelnames=['hostname', 'index', 'devicename', 'uuid', 'pid', 'username', 'container_name', 'container_image'],
             registry=self.registry,
         )
         self.process_gpu_encoder_utilization = Gauge(
             name='process_gpu_encoder_utilization',
             documentation='Process GPU encoder utilization (%).',
             unit='Percentage',
-            labelnames=['hostname', 'index', 'devicename', 'uuid', 'pid', 'username'],
+            labelnames=['hostname', 'index', 'devicename', 'uuid', 'pid', 'username', 'container_name', 'container_image'],
             registry=self.registry,
         )
         self.process_gpu_decoder_utilization = Gauge(
             name='process_gpu_decoder_utilization',
             documentation='Process GPU decoder utilization (%).',
             unit='Percentage',
-            labelnames=['hostname', 'index', 'devicename', 'uuid', 'pid', 'username'],
+            labelnames=['hostname', 'index', 'devicename', 'uuid', 'pid', 'username', 'container_name', 'container_image'],
             registry=self.registry,
         )
 
@@ -580,7 +580,11 @@ class PrometheusExporter:  # pylint: disable=too-many-instance-attributes
                 with process.oneshot():
                     username = process.username()
                     running_time = process.running_time()
-                    alive_pids.add((pid, username))
+
+                    container_id = get_container_id(str(pid))
+                    container_name, container_image = get_container_info(container_id) if container_id else (NA, NA)
+
+                    alive_pids.add((pid, username, container_name, container_image))
                     for gauge, value in (
                         (
                             self.process_running_time,
@@ -614,9 +618,11 @@ class PrometheusExporter:  # pylint: disable=too-many-instance-attributes
                             uuid=uuid,
                             pid=pid,
                             username=username,
+                            container_name=container_name,
+                            container_image=container_image,
                         ).set(value)
 
-        for pid, username in previous_alive_pids.difference(alive_pids):
+        for pid, username, container_name, container_image in previous_alive_pids.difference(alive_pids):
             for gauge in (
                 self.process_running_time,
                 self.process_cpu_percent,
@@ -636,6 +642,8 @@ class PrometheusExporter:  # pylint: disable=too-many-instance-attributes
                         uuid,
                         pid,
                         username,
+                        container_name,
+                        container_image,
                     )
                 except KeyError:  # noqa: PERF203
                     pass
