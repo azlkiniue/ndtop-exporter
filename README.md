@@ -1,11 +1,4 @@
-# nvitop-exporter
+# ndtop-exporter
 
-Prometheus exporter built on top of `nvitop`.
+Prometheus exporter built on top of `nvitop` and `nvitop_exporter` with additional docker container information, based from [ndtop.py](https://gist.github.com/azlkiniue/71dd741a8a883ac764e94f59656a5ce2)
 
-## Installation
-
-Install from PyPI:
-
-```bash
-pip3 install --upgrade nvitop-exporter
-```
